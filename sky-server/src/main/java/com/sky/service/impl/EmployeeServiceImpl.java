@@ -27,6 +27,20 @@ import java.util.List;
 @Service
 public class EmployeeServiceImpl implements EmployeeService {
     /***
+     * 启用禁用员工账号
+     * @param status
+     * @param id
+     */
+    @Override
+    public void startOrStop(Integer status, long id) {
+        //update employee set status=? where id=?
+        Employee employee = new Employee();
+        employee.setId(id);
+        employee.setStatus(status);
+        employeeMapper.update(employee);
+    }
+
+    /***
      * 分页查询
      * @param employeePageQueryDTO
      * @return

@@ -43,9 +43,9 @@ public class AutoFillAspect {
         Object entity=args[0];
         //准备赋值的数据
         LocalDateTime now=LocalDateTime.now();
-        Long currenId=BaseContext.getCurrentId();
+        Long currentId=BaseContext.getCurrentId();
         //根据当前不同的操作类型，为对应的属性通过反射来赋值
-        if(operationType==operationType.INSERT){
+        if(operationType==OperationType.INSERT){
             //为4个公共字段赋值
             try {
                 Method setCreateTime=entity.getClass().getDeclaredMethod(AutoFillConstant.SET_CREATE_TIME,LocalDateTime.class);
@@ -54,20 +54,20 @@ public class AutoFillAspect {
                 Method setUpdateUser=entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_USER,Long.class);
                 //通过反射为对象属性赋值
                 setCreateTime.invoke(entity,now);
-                setCreateUser.invoke(entity,currenId);
+                setCreateUser.invoke(entity,currentId);
                 setUpdateTime.invoke(entity,now);
-                setUpdateUser.invoke(entity,currenId);
+                setUpdateUser.invoke(entity,currentId);
             } catch (Exception e) {
                 e.printStackTrace();
             }
-        }else if(operationType==operationType.UPDATE){
+        }else if(operationType==OperationType.UPDATE){
             //为2个公共字段赋值
             try {
                 Method setUpdateTime=entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_TIME,LocalDateTime.class);
                 Method setUpdateUser=entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_USER,Long.class);
                 //通过反射为对象属性赋值
                 setUpdateTime.invoke(entity,now);
-                setUpdateUser.invoke(entity,currenId);
+                setUpdateUser.invoke(entity,currentId);
             } catch (Exception e) {
                 e.printStackTrace();
             }

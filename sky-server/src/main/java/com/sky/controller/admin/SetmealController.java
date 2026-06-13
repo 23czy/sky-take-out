@@ -1,6 +1,8 @@
 package com.sky.controller.admin;
 
 import com.sky.dto.SetmealDTO;
+import com.sky.dto.SetmealPageQueryDTO;
+import com.sky.result.PageResult;
 import com.sky.result.Result;
 import com.sky.service.SetmealService;
 import lombok.extern.slf4j.Slf4j;
@@ -29,5 +31,11 @@ public class SetmealController {
         log.info("新增套餐：{}",setmealDTO);
         setmealService.saveWithDish(setmealDTO);
         return Result.success();
+    }
+
+    public Result<PageResult> page(SetmealPageQueryDTO setmealPageQueryDTO){
+        log.info("套餐分页查询：{}",setmealPageQueryDTO);
+        PageResult pageResult=setmealService.pageQuery(setmealPageQueryDTO);
+        return Result.success(pageResult);
     }
 }

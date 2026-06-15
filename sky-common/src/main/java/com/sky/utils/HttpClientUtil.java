@@ -112,6 +112,7 @@ public class HttpClientUtil {
         } finally {
             try {
                 response.close();
+                httpClient.close();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -162,6 +163,7 @@ public class HttpClientUtil {
         } finally {
             try {
                 response.close();
+                httpClient.close();
             } catch (IOException e) {
                 e.printStackTrace();
             }

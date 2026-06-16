@@ -8,10 +8,12 @@ import com.sky.dto.DishDTO;
 import com.sky.dto.DishPageQueryDTO;
 import com.sky.entity.Dish;
 import com.sky.entity.DishFlavor;
+import com.sky.entity.Setmeal;
 import com.sky.exception.DeletionNotAllowedException;
 import com.sky.mapper.DishFlavorMapper;
 import com.sky.mapper.DishMapper;
 import com.sky.mapper.SetmealDishMapper;
+import com.sky.mapper.SetmealMapper;
 import com.sky.result.PageResult;
 import com.sky.service.DishService;
 import com.sky.vo.DishVO;
@@ -27,6 +29,48 @@ import java.util.List;
 @Service
 @Slf4j
 public class DishServiceImpl implements DishService {
+    /***
+     * 菜品起售停售
+     * @param status
+     * @param id
+     */
+    @Override
+    @Transactional
+    public void startOrStop(Integer status, Long id) {
+        // 1. 更新当前菜品的状态
+        // 利用带有 @Builder 注解的 Dish 实体类，快速构建出只包含 id 和 status 的对象
+        Dish dish = Dish.builder()
+                .id(id)
+                .status(status)
+                .build();
+        // 直接调用你现有的通用 update 动态 SQL 方法修改状态
+        dishMapper.update(dish);
+
+        // 2. 核心业务联动：如果是“停售(0)”操作，需要把包含这个菜品的套餐也一起停售
+        if (status == StatusConstant.DISABLE) { // StatusConstant.DISABLE 的值就是 0
+
+            List<Long> dishIds = new ArrayList<>();
+            dishIds.add(id); // 把当前修改的菜品id存入集合
+
+            // 调用你之前在批量删除时就已经写好的 getSetmealIdsByDishIds 方法
+            // 通过当前菜品 id，去 setmeal_dish 关系表里找出所有关联的套餐 id
+            List<Long> setmealIds = setmealDishMapper.getSetmealIdsByDishIds(dishIds);
+
+            // 如果存在关联的套餐，遍历并把它们也一起停售
+            if (setmealIds != null && setmealIds.size() > 0) {
+                for (Long setmealId : setmealIds) {
+                    // 构建套餐对象，强行将状态也改为停售状态(0)
+                    Setmeal setmeal = Setmeal.builder()
+                            .id(setmealId)
+                            .status(StatusConstant.DISABLE)
+                            .build();
+                    // 调用你现有的通用套餐 update 动态 SQL 修改套餐状态
+                    setmealMapper.update(setmeal);
+                }
+            }
+        }
+    }
+
     /***
      * 根据分类id查询菜品
      * @param categoryId
@@ -136,6 +180,8 @@ public class DishServiceImpl implements DishService {
     private DishFlavorMapper dishFlavorMapper;
     @Autowired
     private SetmealDishMapper setmealDishMapper;
+    @Autowired
+    private SetmealMapper setmealMapper;
     /***
      * 新增菜品和对应口味
      * @param dishDTO

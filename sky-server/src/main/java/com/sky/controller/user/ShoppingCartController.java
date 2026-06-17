@@ -4,6 +4,7 @@ import com.sky.dto.ShoppingCartDTO;
 import com.sky.entity.ShoppingCart;
 import com.sky.result.Result;
 import com.sky.service.ShoppingCartService;
+import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -47,6 +48,23 @@ public class ShoppingCartController {
     @DeleteMapping("/clean")
     public Result clean(){
         shoppingCartService.cleanShoppingCart();
+        return Result.success();
+    }
+
+    /**
+     * 删除购物车中一个商品
+     * @param shoppingCartDTO 前端传来的商品/套餐ID及口味信息
+     * @return 统一返回结果
+     */
+    @PostMapping("/sub")
+    public Result sub(@RequestBody ShoppingCartDTO shoppingCartDTO){
+        // 1. 打印日志，方便控制台观察前端传了什么数据过来
+        log.info("删除购物车中一个商品，商品：{}", shoppingCartDTO);
+
+        // 2. 调用业务层执行“减少/删除”逻辑
+        shoppingCartService.subShoppingCart(shoppingCartDTO);
+
+        // 3. 返回成功响应
         return Result.success();
     }
 }

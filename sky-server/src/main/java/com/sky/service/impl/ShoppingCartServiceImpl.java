@@ -20,6 +20,45 @@ import java.util.List;
 @Service
 @Slf4j
 public class ShoppingCartServiceImpl implements ShoppingCartService {
+    /**
+     * 删除购物车中一个商品
+     * @param shoppingCartDTO
+     */
+    @Override
+    public void subShoppingCart(ShoppingCartDTO shoppingCartDTO) {
+        // 1. 创建一个空购物车对象，用于封装查询条件
+        ShoppingCart shoppingCart = new ShoppingCart();
+
+        // 2. 将前端传来的 DTO 属性（dishId, setmealId, dishFlavor）拷贝到实体中
+        BeanUtils.copyProperties(shoppingCartDTO, shoppingCart);
+
+        // 3. 关键安全细节：强制绑定当前登录用户的 ID
+        shoppingCart.setUserId(BaseContext.getCurrentId());
+
+        // 4. 去数据库里查：当前用户这个唯一的菜品/套餐记录
+        List<ShoppingCart> list = shoppingCartMapper.list(shoppingCart);
+
+        // 5. 防御性编程：确保查出来的确有这条购物车数据
+        if(list != null && list.size() > 0){
+            // 获取这一条唯一的购物车商品数据
+            shoppingCart = list.get(0);
+
+            // 6. 核心业务分水岭：检查当前购物车的数量
+            Integer number = shoppingCart.getNumber();
+
+            if(number == 1){
+                // 情况 A：数量刚好等于 1，再减就变成 0 了。
+                // 此时应该直接在数据库中“抹除（DELETE）”这条商品记录！
+                shoppingCartMapper.deleteById(shoppingCart.getId());
+            } else {
+                // 情况 B：数量大于 1（比如原先购物车里有 3 份米饭）。
+                // 此时不能删记录，只需要执行“数量 - 1”并修改（UPDATE）数据库即可
+                shoppingCart.setNumber(shoppingCart.getNumber() - 1);
+                shoppingCartMapper.updateNumberById(shoppingCart);
+            }
+        }
+    }
+
     /***
      * 清空购物车
      */

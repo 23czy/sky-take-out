@@ -428,4 +428,49 @@ public class OrderServiceImpl implements OrderService {
 
         orderMapper.update(orders);
     }
+
+    /**
+     * 订单派送业务实现
+     */
+    @Override
+    public void delivery(Long id) {
+        // 1. 根据id查询订单
+        Orders ordersDB = orderMapper.getById(id);
+
+        // 2. 状态校验：只有状态为 3（已接单）的订单，商户才能点派送
+        if (ordersDB == null || !ordersDB.getStatus().equals(Orders.CONFIRMED)) {
+            throw new OrderBusinessException("订单状态异常，无法进行派送操作");
+        }
+
+        // 3. 组装更新字段：推进状态为 4（派送中）
+        Orders orders = Orders.builder()
+                .id(id)
+                .status(Orders.DELIVERY_IN_PROGRESS)
+                .build();
+
+        orderMapper.update(orders);
+    }
+
+    /**
+     * 完成订单业务实现
+     */
+    @Override
+    public void complete(Long id) {
+        // 1. 根据id查询订单
+        Orders ordersDB = orderMapper.getById(id);
+
+        // 2. 状态校验：只有状态为 4（派送中）的订单才能改成 5（已完成）
+        if (ordersDB == null || !ordersDB.getStatus().equals(Orders.DELIVERY_IN_PROGRESS)) {
+            throw new OrderBusinessException("订单状态异常，无法完成该订单");
+        }
+
+        // 3. 组装更新字段：修改状态为 5，并打上当下的送达时间戳
+        Orders orders = Orders.builder()
+                .id(id)
+                .status(Orders.COMPLETED)
+                .deliveryTime(LocalDateTime.now()) // 核心细节：记录送达时间！
+                .build();
+
+        orderMapper.update(orders);
+    }
 }

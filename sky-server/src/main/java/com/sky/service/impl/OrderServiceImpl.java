@@ -206,4 +206,30 @@ public class OrderServiceImpl implements OrderService {
         }
         return new PageResult(page.getTotal(), list);
     }
+
+    /**
+     * 根据订单id查询订单详情
+     */
+    @Override
+    public OrderVO details(Long id) {
+        // 1. 根据id查询订单主表数据
+        Orders orders = orderMapper.getById(id);
+
+        // 2. 安全检查：如果订单不存在，直接返回空或报错
+        if (orders == null) {
+            return null;
+        }
+
+        // 3. 根据订单id查询对应的菜品/套餐明细列表
+        List<OrderDetail> orderDetailList = orderDetailMapper.getByOrderId(id);
+
+        // 4. 将主表数据拷贝到 VO 对象中
+        OrderVO orderVO = new OrderVO();
+        BeanUtils.copyProperties(orders, orderVO);
+
+        // 5. 将明细列表注入 VO
+        orderVO.setOrderDetailList(orderDetailList);
+
+        return orderVO;
+    }
 }

@@ -21,6 +21,7 @@ import com.sky.mapper.ShoppingCartMapper;
 import com.sky.result.PageResult;
 import com.sky.service.OrderService;
 import com.sky.vo.OrderPaymentVO;
+import com.sky.vo.OrderStatisticsVO;
 import com.sky.vo.OrderSubmitVO;
 import com.sky.vo.OrderVO;
 import lombok.extern.slf4j.Slf4j;
@@ -299,5 +300,66 @@ public class OrderServiceImpl implements OrderService {
 
         // 4. 将购物车对象批量插入到数据库中
         shoppingCartMapper.insertBatch(shoppingCartList);
+    }
+
+    /**
+     * 商家端订单条件分页查询
+     */
+    @Override
+    public PageResult conditionSearch(OrdersPageQueryDTO ordersPageQueryDTO) {
+        // 1. 开启 PageHelper 分页机制
+        PageHelper.startPage(ordersPageQueryDTO.getPage(), ordersPageQueryDTO.getPageSize());
+
+        // 2. 复用我们在用户端写好的 orderMapper.pageQuery 动态SQL
+        Page<Orders> page = orderMapper.pageQuery(ordersPageQueryDTO);
+
+        // 3. 部分重组：因为部分前端页面需要展示“订单菜品信息简写”（例如：宫保鸡丁*2, 可乐*1）
+        List<OrderVO> orderVOList = new ArrayList<>();
+        if (page != null && page.getTotal() > 0) {
+            for (Orders orders : page) {
+                OrderVO orderVO = new OrderVO();
+                BeanUtils.copyProperties(orders, orderVO);
+
+                // 获取当前订单的商品明细简写字符串（提取成私有方法，使代码更美观）
+                String orderDishes = getOrderDishesStr(orders);
+                orderVO.setOrderDishes(orderDishes);
+
+                orderVOList.add(orderVO);
+            }
+        }
+        return new PageResult(page.getTotal(), orderVOList);
+    }
+
+    /**
+     * 私有辅助方法：根据订单id，将所有明细拼接成：宫保鸡丁*2, 鱼香肉丝*1 这样的字符串
+     */
+    private String getOrderDishesStr(Orders orders) {
+        List<OrderDetail> orderDetailList = orderDetailMapper.getByOrderId(orders.getId());
+
+        List<String> orderDishList = orderDetailList.stream().map(x -> {
+            return x.getName() + "*" + x.getNumber();
+        }).collect(Collectors.toList());
+
+        // 用逗号拼接
+        return String.join(",", orderDishList);
+    }
+
+    /**
+     * 各个状态的订单数量统计
+     */
+    @Override
+    public OrderStatisticsVO statistics() {
+        // 1. 分别查询出 待接单、待派送（已接单）、派送中的订单数量
+        Integer toBeConfirmed = orderMapper.countByStatus(Orders.TO_BE_CONFIRMED); // 2
+        Integer confirmed = orderMapper.countByStatus(Orders.CONFIRMED);           // 3
+        Integer deliveryInProgress = orderMapper.countByStatus(Orders.DELIVERY_IN_PROGRESS); // 4
+
+        // 2. 将数量塞入统计对象中
+        OrderStatisticsVO orderStatisticsVO = new OrderStatisticsVO();
+        orderStatisticsVO.setToBeConfirmed(toBeConfirmed);
+        orderStatisticsVO.setConfirmed(confirmed);
+        orderStatisticsVO.setDeliveryInProgress(deliveryInProgress);
+
+        return orderStatisticsVO;
     }
 }

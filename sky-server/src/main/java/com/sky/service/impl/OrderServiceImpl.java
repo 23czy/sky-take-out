@@ -12,6 +12,7 @@ import com.sky.entity.OrderDetail;
 import com.sky.entity.Orders;
 import com.sky.entity.ShoppingCart;
 import com.sky.exception.AddressBookBusinessException;
+import com.sky.exception.OrderBusinessException;
 import com.sky.exception.ShoppingCartBusinessException;
 import com.sky.mapper.AddressBookMapper;
 import com.sky.mapper.OrderDetailMapper;
@@ -231,5 +232,44 @@ public class OrderServiceImpl implements OrderService {
         orderVO.setOrderDetailList(orderDetailList);
 
         return orderVO;
+    }
+
+    /**
+     * 用户取消订单
+     */
+    @Override
+    public void userCancelById(Long id) throws Exception {
+        // 1. 根据id查询订单
+        Orders ordersDB = orderMapper.getById(id);
+
+        // 2. 校验订单是否存在
+        if (ordersDB == null) {
+            throw new OrderBusinessException("订单不存在");
+        }
+
+        // 3. 校验订单状态：只有待付款(1) 和 待接单(2) 状态下用户才能取消
+        if (ordersDB.getStatus() > 2) {
+            throw new OrderBusinessException("订单已在处理中，无法取消，请联系商家");
+        }
+
+        Orders orders = new Orders();
+        orders.setId(ordersDB.getId());
+
+        // 4. 判断是否已经付过钱（状态2 或者是 状态1但由于特殊模拟机制已支付）
+        // 在苍穹外卖的标准逻辑中，只要 status == 2 (待接单)，就代表一定付过钱了
+        if (ordersDB.getStatus().equals(Orders.TO_BE_CONFIRMED)) {
+            // 原本需要调用微信退款接口:
+            // weChatPayUtil.refund(ordersDB.getNumber(), ordersDB.getNumber(), new BigDecimal(0.01), new BigDecimal(0.01));
+            // 💡 模拟支付/退款绕过法：直接打印日志，并在数据库中强行把支付状态改为已退款
+            log.info("模拟微信退款成功，订单号：{}", ordersDB.getNumber());
+            orders.setPayStatus(Orders.REFUND); // 设置支付状态为：2已退款
+        }
+
+        // 5. 更新订单状态机：更新状态为已取消(6)，并记录取消原因和取消时间
+        orders.setStatus(Orders.CANCELLED);
+        orders.setCancelReason("用户主动取消");
+        orders.setCancelTime(LocalDateTime.now());
+
+        orderMapper.update(orders);
     }
 }

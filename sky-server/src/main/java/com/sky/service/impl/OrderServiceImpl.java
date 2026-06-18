@@ -4,10 +4,7 @@ import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.Page;
 import com.sky.constant.MessageConstant;
 import com.sky.context.BaseContext;
-import com.sky.dto.OrdersConfirmDTO;
-import com.sky.dto.OrdersPageQueryDTO;
-import com.sky.dto.OrdersPaymentDTO;
-import com.sky.dto.OrdersSubmitDTO;
+import com.sky.dto.*;
 import com.sky.entity.AddressBook;
 import com.sky.entity.OrderDetail;
 import com.sky.entity.Orders;
@@ -376,6 +373,59 @@ public class OrderServiceImpl implements OrderService {
                 .build();
 
         // 2. 调用通用的动态更新方法更新数据库
+        orderMapper.update(orders);
+    }
+
+    /**
+     * 商家拒单业务实现
+     */
+    @Override
+    public void rejection(OrdersRejectionDTO ordersRejectionDTO) throws Exception {
+        // 1. 根据id查询订单
+        Orders ordersDB = orderMapper.getById(ordersRejectionDTO.getId());
+
+        // 2. 状态校验：只有待接单(2)的订单才可以被拒绝
+        if (ordersDB == null || !ordersDB.getStatus().equals(Orders.TO_BE_CONFIRMED)) {
+            throw new OrderBusinessException("当前订单状态异常，无法拒单");
+        }
+
+        // 3. 模拟微信退款
+        log.info("拒单触发退款逻辑，订单号：{}，模拟退款金额：{}元", ordersDB.getNumber(), ordersDB.getAmount());
+
+        // 4. 更新订单状态机
+        Orders orders = Orders.builder()
+                .id(ordersRejectionDTO.getId())
+                .status(Orders.CANCELLED)               // 状态变更为: 6 已取消
+                .payStatus(Orders.REFUND)                // 支付状态变更为: 2 已退款
+                .rejectionReason(ordersRejectionDTO.getRejectionReason()) // 记录拒绝原因
+                .cancelTime(LocalDateTime.now())         // 记录操作时间
+                .build();
+
+        orderMapper.update(orders);
+    }
+
+    /**
+     * 商家取消订单业务实现
+     */
+    @Override
+    public void cancel(OrdersCancelDTO ordersCancelDTO) throws Exception {
+        // 1. 根据id查询订单
+        Orders ordersDB = orderMapper.getById(ordersCancelDTO.getId());
+
+        // 2. 模拟微信退款判定：如果用户付过钱，强制退款
+        if (ordersDB != null && ordersDB.getPayStatus().equals(Orders.PAID)) {
+            log.info("商家取消订单，触发模拟退款。订单号：{}", ordersDB.getNumber());
+        }
+
+        // 3. 组装更新字段
+        Orders orders = Orders.builder()
+                .id(ordersCancelDTO.getId())
+                .status(Orders.CANCELLED)             // 状态变更为: 6 已取消
+                .payStatus(Orders.REFUND)              // 支付状态变更为: 2 已退款
+                .cancelReason(ordersCancelDTO.getCancelReason()) // 记录取消原因
+                .cancelTime(LocalDateTime.now())       // 记录取消时间
+                .build();
+
         orderMapper.update(orders);
     }
 }

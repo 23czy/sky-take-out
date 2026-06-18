@@ -1,0 +1,167 @@
+package com.sky.service.impl;
+
+import com.sky.constant.MessageConstant;
+import com.sky.context.BaseContext;
+import com.sky.dto.OrdersPaymentDTO;
+import com.sky.dto.OrdersSubmitDTO;
+import com.sky.entity.AddressBook;
+import com.sky.entity.OrderDetail;
+import com.sky.entity.Orders;
+import com.sky.entity.ShoppingCart;
+import com.sky.exception.AddressBookBusinessException;
+import com.sky.exception.ShoppingCartBusinessException;
+import com.sky.mapper.AddressBookMapper;
+import com.sky.mapper.OrderDetailMapper;
+import com.sky.mapper.OrderMapper;
+import com.sky.mapper.ShoppingCartMapper;
+import com.sky.service.OrderService;
+import com.sky.vo.OrderPaymentVO;
+import com.sky.vo.OrderSubmitVO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+@Slf4j
+public class OrderServiceImpl implements OrderService {
+    /**
+     * 订单支付（模拟版本）
+     *
+     * @param ordersPaymentDTO
+     * @return
+     */
+    @Override
+    public OrderPaymentVO payment(OrdersPaymentDTO ordersPaymentDTO) throws Exception {
+        log.info("【模拟支付-Service】生成预支付假数据：{}", ordersPaymentDTO.getOrderNumber());
+
+        // 构造一个飽滿的假VO对象，确保在任何调用 Service 的场景下前端都不会报错
+        OrderPaymentVO orderPaymentVO = new OrderPaymentVO();
+        orderPaymentVO.setNonceStr("mock_nonce_str_123456");
+        orderPaymentVO.setPaySign("mock_pay_sign_abcdefg");
+        orderPaymentVO.setSignType("MD5");
+        orderPaymentVO.setTimeStamp(String.valueOf(System.currentTimeMillis() / 1000));
+        orderPaymentVO.setPackageStr("prepay_id=mock_prepay_id_99999");
+
+        return orderPaymentVO;
+    }
+
+    /**
+     * 支付成功，修改订单状态（模拟支付的核心落地点）
+     *
+     * @param outTradeNo 订单号（即你下单时生成的 orders.getNumber()）
+     */
+    @Override
+    @Transactional
+    public void paySuccess(String outTradeNo) {
+        log.info("【模拟支付-Service】正在推进订单 {} 的数据库状态...", outTradeNo);
+
+        // 1. 根据订单号查询当前数据库中的订单
+        // 🚨 避坑提示：请确保你的 orderMapper 里实现了根据订单号查询订单的方法，通常黑马自带的叫 getByNumber
+        Orders ordersDB = orderMapper.getByNumber(outTradeNo);
+
+        // 2. 只有当订单存在且为“待付款”状态时，才去推进状态（防止重复触发）
+        if (ordersDB != null && ordersDB.getStatus().equals(Orders.PENDING_PAYMENT)) {
+
+            Orders orders = new Orders();
+            orders.setId(ordersDB.getId());
+            // 更新订单状态为：2. 待接单
+            orders.setStatus(Orders.TO_BE_CONFIRMED);
+            // 更新支付状态为：1. 已支付
+            orders.setPayStatus(Orders.PAID);
+            // 更新真实的支付完成时间
+            orders.setCheckoutTime(LocalDateTime.now());
+
+            // 更新到数据库
+            orderMapper.update(orders);
+            log.info("【模拟支付-Service】订单 {} 数据库状态已成功更新为：【已支付/待接单】", outTradeNo);
+
+            /* 💡 顺便提醒（后面章节会学到）：
+               黑马在后面的“WebSocket 商家通知”和“客户催单”章节中，
+               就是在此处（paySuccess方法内部）向商家推送 WebSocket 语音消息的。
+               现在我们把它架设好了，后面学到 WebSocket 时，直接把推送代码贴在下面即可！
+            */
+        }
+    }
+
+    @Autowired
+    private OrderMapper orderMapper;
+
+    @Autowired
+    private OrderDetailMapper orderDetailMapper;
+
+    @Autowired
+    private AddressBookMapper  addressBookMapper;
+
+    @Autowired
+    private ShoppingCartMapper shoppingCartMapper;
+    /***
+     * 用户下单
+     * @param ordersSubmitDTO
+     */
+    @Override
+    @Transactional
+    public OrderSubmitVO submitOrder(OrdersSubmitDTO ordersSubmitDTO) {
+        //处理各种业务异常问题（地址簿为空，购物车数据为空）
+        AddressBook addressBook = addressBookMapper.getById(ordersSubmitDTO.getAddressBookId());
+        if(addressBook==null){
+            //抛出业务异常
+            throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
+        }
+
+        //查询当前用户购物车数据
+        Long userId = BaseContext.getCurrentId();
+
+        ShoppingCart shoppingCart = new ShoppingCart();
+        shoppingCart.setUserId(userId);
+        List<ShoppingCart> shoppingCartList=shoppingCartMapper.list(shoppingCart);
+        if(shoppingCartList==null||shoppingCartList.size()==0){
+            //抛出业务异常
+            throw new ShoppingCartBusinessException(MessageConstant.SHOPPING_CART_IS_NULL);
+        }
+
+        //向订单表插入一条数据
+        Orders orders = new Orders();
+        BeanUtils.copyProperties(ordersSubmitDTO,orders);
+        orders.setUserId(userId);
+        orders.setOrderTime(LocalDateTime.now());
+        orders.setPayStatus(Orders.UN_PAID);
+        orders.setStatus(Orders.PENDING_PAYMENT);
+        orders.setNumber(String.valueOf(System.currentTimeMillis()));
+        orders.setPhone(addressBook.getPhone());
+        orders.setConsignee(addressBook.getConsignee());
+        // 在包含 status, number 等设置的下方，添加地址字符串拼接
+        String address = addressBook.getProvinceName() + addressBook.getCityName() + addressBook.getDistrictName() + addressBook.getDetail();
+        orders.setAddress(address); // 👈 这一行极其重要，必须要加！
+
+        // 随后再执行插入
+        orderMapper.insert(orders);
+
+
+        List<OrderDetail> orderDetailList=new ArrayList<>();
+        //向订单明细表插入n条数据
+        for(ShoppingCart cart:shoppingCartList ){
+            OrderDetail orderDetail=new OrderDetail();
+            BeanUtils.copyProperties(cart,orderDetail);
+            orderDetail.setOrderId(orders.getId());//设置当前订单明细关联的订单id
+            orderDetailList.add(orderDetail);
+        }
+        orderDetailMapper.insertBatch(orderDetailList);
+
+        //提交订单后清空当前用户的购物车数据
+        shoppingCartMapper.deleteByUserId(userId);
+        //封装VO返回结果
+        OrderSubmitVO orderSubmitVO=OrderSubmitVO.builder()
+                .id(orders.getId())
+                .orderTime(orders.getOrderTime())
+                .orderNumber(orders.getNumber())
+                .orderAmount(orders.getAmount())
+                .build();
+        return orderSubmitVO;
+    }
+}

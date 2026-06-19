@@ -22,6 +22,7 @@ import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderStatisticsVO;
 import com.sky.vo.OrderSubmitVO;
 import com.sky.vo.OrderVO;
+import com.sky.websocket.WebSocketServer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +58,8 @@ public class OrderServiceImpl implements OrderService {
         return orderPaymentVO;
     }
 
+    @Autowired
+    private WebSocketServer webSocketServer;
     /**
      * 支付成功，修改订单状态（模拟支付的核心落地点）
      *
@@ -92,6 +95,16 @@ public class OrderServiceImpl implements OrderService {
                就是在此处（paySuccess方法内部）向商家推送 WebSocket 语音消息的。
                现在我们把它架设好了，后面学到 WebSocket 时，直接把推送代码贴在下面即可！
             */
+            // 🔥【核心追加】：通过 WebSocket 向商家端大屏推送“来单提醒”
+            java.util.Map<String, Object> map = new java.util.HashMap<>();
+            map.put("type", 1); // 1 代表来单提醒
+            map.put("orderId", ordersDB.getId());
+            map.put("content", "订单号：" + outTradeNo);
+
+            // 转换成 JSON 字符串群发给商家端前端（前端收到后会触发语音播报）
+            String json = com.alibaba.fastjson.JSON.toJSONString(map);
+            webSocketServer.sendToAllClient(json);
+            log.info("【WebSocket】已成功群发“来单提醒”消息：{}", json);
         }
     }
 
@@ -472,5 +485,31 @@ public class OrderServiceImpl implements OrderService {
                 .build();
 
         orderMapper.update(orders);
+    }
+
+    /**
+     * 用户端订单催单功能实现
+     * * @param id 订单主键ID
+     */
+    @Override
+    public void reminder(Long id) {
+        // 1. 根据id查询当前的订单数据
+        Orders ordersDB = orderMapper.getById(id);
+
+        // 2. 业务状态校验：订单不存在则抛出异常
+        if (ordersDB == null) {
+            throw new OrderBusinessException(MessageConstant.ORDER_NOT_FOUND);
+        }
+
+        // 3. 🔥【核心实现】：通过 WebSocket 向商家端大屏推送“催单提醒”
+        java.util.Map<String, Object> map = new java.util.HashMap<>();
+        map.put("type", 2); // 2 代表催单提醒
+        map.put("orderId", id);
+        map.put("content", "订单号：" + ordersDB.getNumber());
+
+        // 将 Map 转换为 JSON 字符串群发
+        String json = com.alibaba.fastjson.JSON.toJSONString(map);
+        webSocketServer.sendToAllClient(json);
+        log.info("【WebSocket】已成功群发“用户催单”消息：{}", json);
     }
 }
